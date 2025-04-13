@@ -52,7 +52,7 @@ void Game::waitCoins() {
     m_pJoystick->enable();
 
     render(RENDER_MODE_INSERT_COINS);
-    m_pJoystick->waitMove(portMAX_DELAY);
+    m_pJoystick->waitMove(portMAX_DELAY); // wait for a button press
 }
 
 void Game::playMatch() {
@@ -61,12 +61,15 @@ void Game::playMatch() {
     clear();
 
     for (;;) {
+        // try to place a new tetromino
+        // if it overlaps, game over
         if (newTetromino()) {
-            uint32_t timeLeft = FALLING_SPEED;
+            render(RENDER_MODE_PLAYING);
+
+            uint32_t timeLeft = FALLING_SPEED; // the time left for the tetromino to fall
 
             for (;;) {
-                bool shouldRedraw = false;
-                bool landed = false, fallen = false;
+                bool moved = false, landed = false, fallen = false;
 
                 uint32_t startTime = millis();
 
@@ -74,26 +77,28 @@ void Game::playMatch() {
 
                 switch (button) {
                     case Joystick::BUTTON_LEFT:
-                        shouldRedraw = moveTetromino(-1);
+                        moved = moveTetromino(-1);
                         break;
                     case Joystick::BUTTON_RIGHT:
-                        shouldRedraw = moveTetromino(1);
+                        moved = moveTetromino(1);
                         break;
                     case Joystick::BUTTON_ROTATE:
-                        shouldRedraw = rotateTetromino();
+                        moved = rotateTetromino();
                         break;
                     default:
                         fallen = true;
-                        landed = !moveTetromino(0, -1);
+                        landed = !moveTetromino(0, -1); // if it can't move down, it has landed
                         timeLeft = FALLING_SPEED;
                         break;
                 }
 
-                if (fallen || landed || shouldRedraw) {
+                if (fallen || landed || moved) {
+                    // something changed on the screen, redraw needed
                     render(RENDER_MODE_PLAYING);
                 }
                 
                 if (!fallen) {
+                    // if the tetromino hasn't fallen yet, calculate the time left for another move
                     uint32_t endTime = millis();
 
                     uint32_t elapsedTime = endTime - startTime;
@@ -108,7 +113,7 @@ void Game::playMatch() {
 
                 if (landed) {
                     Serial.printf("X=%d Y=%d - tetromino landed!\n", m_TetrominoX, m_TetrominoY);
-                    placeTetromino();
+                    placeTetromino(); // place the tetromino on the board
                     break;
                 }
             }
@@ -124,7 +129,7 @@ void Game::over() {
     m_pJoystick->enable();
 
     render(RENDER_MODE_GAME_OVER);
-    m_pJoystick->waitMove(portMAX_DELAY);
+    m_pJoystick->waitMove(portMAX_DELAY); // wait for a button press
 
     m_pJoystick->disable();
 }
@@ -132,50 +137,58 @@ void Game::over() {
 void Game::render(RenderMode mode) {
     m_pDisplay->clearDisplay();
 
+    // game board border
     m_pDisplay->drawFastVLine(0, 0, PLAYSCREEN_HEIGHT, SSD1306_WHITE);
     m_pDisplay->drawFastVLine(PLAYSCREEN_WIDTH - 1, 0, PLAYSCREEN_HEIGHT, SSD1306_WHITE);
 
     switch (mode) {
         case RENDER_MODE_INSERT_COINS:
-            m_pDisplay->setCursor(8, 20);
+            m_pDisplay->setTextSize(2);
+            m_pDisplay->setCursor(15, 20);
             m_pDisplay->print(F("INS"));
-            m_pDisplay->setCursor(8, 35);
+            m_pDisplay->setCursor(15, 40);
             m_pDisplay->print(F("ERT"));
-            m_pDisplay->setCursor(11, 50);
+            m_pDisplay->setCursor(21, 60);
             m_pDisplay->print(F("CO"));
-            m_pDisplay->setCursor(8, 65);
+            m_pDisplay->setCursor(15, 80);
             m_pDisplay->print(F("INS"));
             break;
 
         case RENDER_MODE_PLAYING:
+            // draw the game board
             for (int i = 0; i < BOARD_HEIGHT; i++) {
                 for (int j = 0; j < BOARD_WIDTH; j++) {
                     if (m_Completed[i]) {
-                        m_pDisplay->drawPixel(1 + (j * BLOCK_WIDTH) + (BLOCK_WIDTH / 2), PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
+                        // we're going to remove this row, so draw some dots to simulate an explosion
+                        m_pDisplay->drawPixel(LEFT_MARGIN + (j * BLOCK_WIDTH) + (BLOCK_WIDTH / 2), PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
                     } else if (m_Board[i][j]) {
-                        m_pDisplay->fillRect(1 + (j * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - ((i + 1) * BLOCK_HEIGHT), BLOCK_WIDTH, BLOCK_HEIGHT, SSD1306_WHITE);
+                        m_pDisplay->fillRect(LEFT_MARGIN + (j * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - ((i + 1) * BLOCK_HEIGHT), BLOCK_WIDTH, BLOCK_HEIGHT, SSD1306_WHITE);
                     }
                 }
             }
             
+            // draw the falling tetromino
+            // m_pTetromino is NULL if the tetromino has landed
             if (m_pTetromino) {
                 for (int i = 0; i < 4; i++) {
                     assert(!m_Completed[i]);
                     int8_t x = m_TetrominoX + m_pTetromino->blocks[i].x;
                     int8_t y = m_TetrominoY + m_pTetromino->blocks[i].y;
-                    m_pDisplay->fillRect(1 + (x * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - ((y + 1) * BLOCK_HEIGHT), BLOCK_WIDTH, BLOCK_HEIGHT, SSD1306_WHITE);
+                    m_pDisplay->fillRect(LEFT_MARGIN + (x * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - ((y + 1) * BLOCK_HEIGHT), BLOCK_WIDTH, BLOCK_HEIGHT, SSD1306_WHITE);
                 }
 
+                // falling hint - left boundary
                 for (int i = m_TetrominoY + m_pTetromino->leftboundary.y - 1; i >= 0; i--) {
                     int8_t x = m_TetrominoX + m_pTetromino->leftboundary.x;
-                    m_pDisplay->drawPixel(1 + (x * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
+                    m_pDisplay->drawPixel(LEFT_MARGIN + (x * BLOCK_WIDTH), PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
                     if (i == 0 || m_Board[i][x])
                         break;
                 }
 
+                // falling hint - right boundary
                 for (int i = m_TetrominoY + m_pTetromino->rightboundary.y - 1; i >= 0; i--) {
                     int8_t x = m_TetrominoX + m_pTetromino->rightboundary.x + 1;
-                    m_pDisplay->drawPixel(x * BLOCK_WIDTH, PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
+                    m_pDisplay->drawPixel(LEFT_MARGIN + (x * BLOCK_WIDTH) - 1, PLAYSCREEN_HEIGHT - (i * BLOCK_HEIGHT) - (BLOCK_HEIGHT / 2), SSD1306_WHITE);
                     if (i == 0 || m_Board[i][x - 1])
                         break;
                 }
@@ -183,9 +196,10 @@ void Game::render(RenderMode mode) {
             break;
 
         case RENDER_MODE_GAME_OVER:
-            m_pDisplay->setCursor(5, 30);
+            m_pDisplay->setTextSize(2);
+            m_pDisplay->setCursor(9, 30);
             m_pDisplay->print(F("GAME"));
-            m_pDisplay->setCursor(5, 50);
+            m_pDisplay->setCursor(9, 60);
             m_pDisplay->print(F("OVER"));
             break;
 
@@ -203,9 +217,11 @@ bool Game::newTetromino() {
     m_TetrominoRotation = ROTATION_0;
     m_pTetromino = &(Pieces[m_TetrominoType][m_TetrominoRotation]);
 
-    return !tetrominoOverlaps();
+    return !tetrominoOverlaps(); // if it overlaps, game over
 }
 
+// deltaX and deltaY allow us to check for overlaps befor the move takes place
+// pTetromino is used to check for overlaps when rotating the tetromino
 bool Game::tetrominoOverlaps(const Tetromino* pTetromino, int8_t deltaX, int8_t deltaY) {
     if (pTetromino == NULL) {
         pTetromino = m_pTetromino;
@@ -217,7 +233,9 @@ bool Game::tetrominoOverlaps(const Tetromino* pTetromino, int8_t deltaX, int8_t 
         int8_t x = m_TetrominoX + pTetromino->blocks[i].x + deltaX;
         int8_t y = m_TetrominoY + pTetromino->blocks[i].y + deltaY;
 
-        if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) {
+        assert(y < BOARD_HEIGHT);
+
+        if (x < 0 || x >= BOARD_WIDTH || y < 0) {
             return true;
         }
 
@@ -259,8 +277,10 @@ bool Game::moveTetromino(int8_t deltaX, int8_t deltaY) {
 }
 
 bool Game::rotateTetromino() {
+    // pointer to the next rotation of the tetromino
     const Tetromino* pTetromino = &(Pieces[m_TetrominoType][(m_TetrominoRotation + 1) % ROTATION_COUNT]);
 
+    // would the rotated tetromino overlap?
     if (tetrominoOverlaps(pTetromino)) {
         return false;
     }
@@ -273,12 +293,16 @@ bool Game::rotateTetromino() {
 
 void Game::removeCompletedRows() {
     if (clearCompletedRows()) {
-        m_pJoystick->disable();
-        render(RENDER_MODE_PLAYING);
+        m_pJoystick->disable(); // we don't accept any input while the rows are being removed
+
+        render(RENDER_MODE_PLAYING); // draw the game board. The completed rows are drawn using dots
+        
         delay(200);
-        compactBoard();
-        render(RENDER_MODE_PLAYING);
-        m_pJoystick->enable();
+        compactBoard(); // remove the completed rows
+        
+        render(RENDER_MODE_PLAYING); // draw the game board again
+        
+        m_pJoystick->enable(); // enable input again
     }
 }
 
@@ -295,13 +319,7 @@ bool Game::clearCompletedRows() {
             }
         }
 
-        if (m_Completed[i]) {
-            for (int j = 0; j < BOARD_WIDTH; j++) {
-                m_Board[i][j] = false;
-            }
-
-            hasCompletedRows = true;
-        }
+        hasCompletedRows = hasCompletedRows || m_Completed[i];
     }
 
     return hasCompletedRows;
@@ -310,16 +328,19 @@ bool Game::clearCompletedRows() {
 void Game::compactBoard() {
     for (int i = BOARD_HEIGHT - 1; i >= 0; i--) {
         if (m_Completed[i]) {
+            // move all rows above the completed row down by one
             for (int j = i; j < BOARD_HEIGHT - 1; j++) {
                 for (int k = 0; k < BOARD_WIDTH; k++) {
                     m_Board[j][k] = m_Board[j + 1][k];
                 }
             }
 
+            // clear the topmost row
             for (int k = 0; k < BOARD_WIDTH; k++) {
                 m_Board[BOARD_HEIGHT - 1][k] = false;
             }
 
+            // mark the completed row as not completed anymore
             m_Completed[i] = false;
         }
     }

@@ -52,8 +52,8 @@ typedef struct {
 
 typedef struct {
     Point blocks[4];
-    Point leftboundary;
-    Point rightboundary;
+    Point leftboundary; // for positioning hint
+    Point rightboundary; // for positioning hint
 } Tetromino;
 
 extern const Tetromino Pieces[TETROMINO_COUNT][ROTATION_COUNT];

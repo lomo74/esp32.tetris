@@ -57,6 +57,8 @@ bool Joystick::begin() {
         {this, PIN_BUTTON_ROTATE, BIT_BUTTON_ROTATE}
     };
 
+    // create a task for each button
+    // each task receives a pointer to the button data structure
     if (xTaskCreate(readButtonTask, "Button Task LEFT", 2048, &buttonData[0], 1, NULL) != pdPASS) {
         return false;
     }
@@ -77,8 +79,9 @@ void Joystick::readButtonTask(void* pvParameters) {
     unsigned long lastDebounceTime = 0;
     int buttonState;
     int lastButtonState = HIGH;
-    ButtonData* pData = (ButtonData*)pvParameters;
+    ButtonData* pData = static_cast<ButtonData*>(pvParameters);
 
+    // debounce algorithm
     for (;;) {
         int reading = digitalRead(pData->pin);
 
@@ -91,6 +94,7 @@ void Joystick::readButtonTask(void* pvParameters) {
                 buttonState = reading;
 
                 if (buttonState == HIGH) {
+                    // button pressed
                     pData->pJoystick->notifyButtonPressed(pData->button);
                 }
             }
@@ -101,7 +105,7 @@ void Joystick::readButtonTask(void* pvParameters) {
         delay(10);
     }
 
-    vTaskDelete(NULL);
+    vTaskDelete(NULL); // we should never get here
 }
 
 void Joystick::notifyButtonPressed(EventBits_t button) {
@@ -114,7 +118,7 @@ void Joystick::notifyButtonPressed(EventBits_t button) {
 
 Joystick::Button Joystick::waitMove(uint32_t timeout) {
     Button button = BUTTON_NONE;
-    TickType_t xTicksToWait = timeout / portTICK_PERIOD_MS;
+    TickType_t xTicksToWait = timeout / portTICK_PERIOD_MS; // convert milliseconds to ticks
 
     EventBits_t uxBits = xEventGroupWaitBits(m_xPressed, BITS_ALL_BUTTONS, pdTRUE, pdFALSE, xTicksToWait);
 

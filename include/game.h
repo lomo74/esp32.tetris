@@ -26,17 +26,19 @@ SOFTWARE.
 #pragma once
 #include <Arduino.h>
 #include <Adafruit_SSD1306.h>
+
 #include "joystick.h"
 #include "tetromino.h"
 
-#define PLAYSCREEN_WIDTH 32
+#define PLAYSCREEN_WIDTH 64
 #define PLAYSCREEN_HEIGHT 128
 
+#define LEFT_MARGIN 2
 #define BOARD_WIDTH 10
-#define BOARD_HEIGHT 25
+#define BOARD_HEIGHT 21
 
-#define BLOCK_WIDTH 3
-#define BLOCK_HEIGHT 5
+#define BLOCK_WIDTH 6
+#define BLOCK_HEIGHT 6
 
 class Game {
 private:
