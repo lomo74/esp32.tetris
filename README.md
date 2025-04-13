@@ -9,6 +9,7 @@ It has been developed as an exercise to get a grasp of the following fundamental
 * hardware debugging
 
 Here are some pictures of the working prototype:
+
 ![(INSERT COINS)](img/ss1.jpg)
 ![(Gameplay)](img/ss2.jpg)
 ![(More gameplay)](img/ss3.jpg)
